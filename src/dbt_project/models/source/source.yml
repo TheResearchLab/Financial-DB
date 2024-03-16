@@ -1,0 +1,7 @@
+version: 2
+
+sources:
+  - name: the-research-lab-db
+    tables:
+      - name: stg_ticker
+      - name: stg_exchange

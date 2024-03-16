@@ -33,26 +33,27 @@ async def main():
     chunksize = 1000
     
     # trunc tables 
-    session.execute(text("TRUNCATE TABLE `the-research-lab-db`.`financial_db.stg_exchange`"))
-    session.execute(text("TRUNCATE TABLE `the-research-lab-db`.`financial_db.stg_ticker`"))
+    session.execute(text("TRUNCATE TABLE `the-research-lab-db`.`stg_exchange`"))
+    session.execute(text("TRUNCATE TABLE `the-research-lab-db`.`stg_ticker`"))
 
     # load dataframes
     exchange_df = await get_exchange_df()
     ticker_df = await get_ticker_df(exchange_df.Code)
 
     # load mysql tables with dataframes
-    exchange_df.to_sql(name="financial_db.stg_exchange",con=engine,if_exists="replace")
+    exchange_df.to_sql(name="stg_exchange",con=engine,if_exists="replace")
 
 
     for i in range(0, len(ticker_df), chunksize):
        chunk = ticker_df[i:i+chunksize]  # Get the chunk of data
-       chunk.to_sql("financial_db.stg_ticker", con=engine, if_exists='append', index=False)
+       chunk.to_sql("stg_ticker", con=engine, if_exists='append', index=False)
     
 
 
 
 if __name__ == "__main__":
     asyncio.run(main())
+    session.close()
     
 
 
