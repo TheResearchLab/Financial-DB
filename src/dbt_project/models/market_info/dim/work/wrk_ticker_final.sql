@@ -4,6 +4,7 @@ select code as ticker_cd
       ,exchange 
       ,currency
       ,type
-      ,Isin 
+      ,Isin
+      ,exchange_cd 
      ,CURRENT_TIMESTAMP as updated_at
  from {{ ref('stg_ticker') }}

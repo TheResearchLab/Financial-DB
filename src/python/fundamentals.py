@@ -16,7 +16,9 @@ async def fetch_ticker(session, exchange):
     url = f'https://eodhd.com/api/exchange-symbol-list/{exchange}?api_token={api_key}&fmt=json'
     async with session.get(url) as response:
         ticker_list = await response.json()
-    return pd.DataFrame.from_dict(ticker_list)
+        df = pd.DataFrame.from_dict(ticker_list)
+        df['exchange_cd'] = exchange
+    return df
 
 async def get_ticker_df(exchange_list: pd.Series) -> pd.DataFrame:
     ticker_df = pd.DataFrame()
@@ -33,8 +35,8 @@ async def main():
     chunksize = 1000
     
     # trunc tables 
-    session.execute(text("TRUNCATE TABLE `the-research-lab-db`.`stg_exchange`"))
-    session.execute(text("TRUNCATE TABLE `the-research-lab-db`.`stg_ticker`"))
+    #session.execute(text("TRUNCATE TABLE `the-research-lab-db`.`stg_exchange`"))
+    #session.execute(text("TRUNCATE TABLE `the-research-lab-db`.`stg_ticker`"))
 
     # load dataframes
     exchange_df = await get_exchange_df()
@@ -56,4 +58,22 @@ if __name__ == "__main__":
     session.close()
     
 
+#%%
+from db_connection import api_key
+import requests
+url = f"https://eodhd.com/api/fundamentals/A.US?api_token={api_key}&fmt=json"
 
+response = requests.get(url)
+data = response.json()
+#data['Financials']['Balance_Sheet']['quarterly']
+#data['Financials']['Balance_Sheet']['yearly']
+
+#data['Financials']['Cash_Flow']['quarterly']
+#data['Financials']['Cash_Flow']['yearly']
+
+#data['Financials']['Income_Statement']['quarterly']
+data['Financial']['Income_Statement']['yearly']
+
+
+
+# %%

@@ -6,6 +6,7 @@ select  CONCAT_WS('-',ticker_cd,CURRENT_TIMESTAMP()) as ticker_id
        ,currency
        ,type
        ,Isin
+       ,exchange_cd
        ,updated_at
        ,dbt_scd_id
        ,dbt_updated_at
