@@ -29,6 +29,26 @@ async def get_ticker_df(exchange_list: pd.Series) -> pd.DataFrame:
     return ticker_df.reset_index(drop=True)
 
 
+async def fetch_financials(session,code,exchange,type,freq):
+    url = f"https://eodhd.com/api/fundamentals/{code}.{exchange}?api_token={api_key}&fmt=json"
+    async with session.get(url) as response:
+        financials = await response.json()
+        financials_df = pd.DataFrame.from_dict(financials['Financials'][type][freq]).T.reset_index(drop=True)
+        financials_df['code'] = code
+        financials_df['exchange'] = exchange
+    return financials_df
+        
+
+async def get_financial_df(code_list:pd.Series,exchange_list:pd.Series,type,freq) -> pd.DataFrame:
+    financial_df = pd.DataFrame()
+    async with aiohttp.ClientSession() as session:
+        tasks = [fetch_financials(session,code,exchange,type,freq) for code, exchange in zip(code_list,exchange_list)]
+        financial_dfs = await asyncio.gather(*tasks)
+        financial_df = pd.concat(financial_dfs)
+    return financial_df.reset_index(drop=True)
+
+
+
 
 # main function 
 async def main():
@@ -38,17 +58,31 @@ async def main():
     #session.execute(text("TRUNCATE TABLE `the-research-lab-db`.`stg_exchange`"))
     #session.execute(text("TRUNCATE TABLE `the-research-lab-db`.`stg_ticker`"))
 
-    # load dataframes
+    # load financial asset codes and exchanges
     exchange_df = await get_exchange_df()
     ticker_df = await get_ticker_df(exchange_df.Code)
 
-    # load mysql tables with dataframes
-    exchange_df.to_sql(name="stg_exchange",con=engine,if_exists="replace")
+    # load common stock balance sheet, income statement, and cashflow statements
+    cs_ticker_cd = ticker_df[ticker_df['Type'] == 'Common Stock'].Code
+    cs_exchange_cd = ticker_df[ticker_df['Type'] == 'Common Stock'].exchange_cd
+    cs_balance_sheet_df = await get_financial_df(cs_ticker_cd,cs_exchange_cd,'Balance_Sheet','quarterly')
 
 
-    for i in range(0, len(ticker_df), chunksize):
-       chunk = ticker_df[i:i+chunksize]  # Get the chunk of data
-       chunk.to_sql("stg_ticker", con=engine, if_exists='append', index=False)
+    # load exchange
+    # exchange_df.to_sql(name="stg_exchange",con=engine,if_exists="replace")
+
+    # load financial asset codes
+    # for i in range(0, len(ticker_df), chunksize):
+    #   chunk = ticker_df[i:i+chunksize]  # Get the chunk of data
+    #   chunk.to_sql("stg_ticker", con=engine, if_exists='append', index=False)
+
+    # load common stock balance sheet
+    for i in range(0,len(cs_balance_sheet_df),chunksize):
+        chunk = cs_balance_sheet_df[i:i+chunksize]
+        chunk.to_sql("stg_balance_sheet_q",con=engine,if_exists='append',index=False)
+
+
+    
     
 
 
@@ -56,7 +90,6 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
     session.close()
-    
 
 #%%
 from db_connection import api_key
@@ -72,7 +105,7 @@ data = response.json()
 #data['Financials']['Cash_Flow']['yearly']
 
 #data['Financials']['Income_Statement']['quarterly']
-data['Financial']['Income_Statement']['yearly']
+pd.DataFrame.from_dict(data['Financials']['Income_Statement']['yearly']).T.reset_index(drop=True).columns
 
 
 
