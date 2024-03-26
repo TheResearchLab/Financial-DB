@@ -24,7 +24,7 @@ def prep_financials_df(financials,code,exchange,ftype,freq):
 
 def fetch_financials(code, exchange, ftype, freq):
     url = f"https://eodhd.com/api/fundamentals/{code}.{exchange}?api_token={api_key}&fmt=json"
-    unique_combo = f'{code}{exchange}'
+    unique_combo = f'{code}-{exchange}'
     
     delete_oldest_entries(cache,6)
     empty_msg = f'stock ticker: {code} exchange: {exchange} ftype: {ftype} freq: {freq} is empty'
@@ -32,37 +32,52 @@ def fetch_financials(code, exchange, ftype, freq):
     if unique_combo in cache:
         financials = cache[unique_combo]
         financials_df = prep_financials_df(financials,code,exchange,ftype,freq)
-        if len(financials_df) == 0:
+        if financials_df.empty:
             print(empty_msg)
-            return None
-        db_load_financials(financials_df)
+            return pd.DataFrame()
+        return financials_df
     else:
-        response = requests.get(url)
-        if response.status_code == 200:
-            try:
+        try:
+            response = requests.get(url)
+            if response.status_code == 200:
                 if int(response.headers['X-RateLimit-Remaining']) <= 1:
                     sleep(60)
                 
                 financials = response.json()
                 financials_df = prep_financials_df(financials,code,exchange,ftype,freq)
 
-                if len(financials_df) == 0:
+                if financials_df.empty:
                     print(empty_msg)
-                    return None
+                    return pd.DataFrame()
+        
 
-                db_load_financials(financials_df)
                 cache[unique_combo] = financials
-            except Exception as e:
-                print(f'Error has occurred: {e}')
-        else:
-            print(f"HTTP Error: status:{response.status_code} code: {code} exchange: {exchange}")
-            return None
+                return financials_df
+        except Exception as e:
+            raise Exception(f'Error has occurred: {e}')
+            
+        
 
-def get_financials(target):
+def get_financials(target,bad_code):
     for code, exchange in tqdm(target,desc='processing',unit='ticker'):
+        skip_code = False
+        if f'{code}-{exchange}' in bad_code:
+            continue
         for freq in ['quarterly', 'yearly']:
             for ftype in ['Balance_Sheet', 'Income_Statement', 'Cash_Flow']:
-                fetch_financials(code, exchange, ftype, freq)
+                
+                financials_df = fetch_financials(code, exchange, ftype, freq)
+
+                if financials_df.empty:
+                    bad_code.append(f'{code}-{exchange}')
+                    pd.DataFrame(bad_code,columns=['bad-tickers']).to_csv('bad_code.csv')
+                    skip_code = True
+                    break
+
+                db_load_financials(financials_df)
+            if skip_code:
+                break 
+        continue 
     return None
 
 def db_load_financials(stmt):
@@ -98,10 +113,16 @@ if __name__ == '__main__':
     # session.execute(text("TRUNCATE TABLE `the-research-lab-db`.`stg_cashflow_yr`"))
 
 
-
+    bad_codes = list(pd.read_csv('bad_code_keep.csv')['bad-tickers'])
 
     
     common_stock = pd.read_sql_query('select code, exchange_cd from stg_ticker_to_load',engine)
     ticker = common_stock['code'].reset_index(drop=True)
     exchange = common_stock['exchange_cd'].reset_index(drop=True)
-    get_financials(list(zip(ticker,exchange)))
+    
+    
+    get_financials(list(zip(ticker,exchange)),bad_codes)
+
+
+
+
