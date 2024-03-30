@@ -15,12 +15,15 @@ def delete_oldest_entries(cache, max_size):
 cache = {}
 
 def prep_financials_df(financials,code,exchange,ftype,freq):
-    financials_df = pd.DataFrame.from_dict(financials['Financials'][ftype][freq]).T.reset_index(drop=True)
-    financials_df['code'] = code
-    financials_df['exchange'] = exchange
-    financials_df['type'] = ftype
-    financials_df['freq'] = freq
-    return financials_df
+    try:
+        financials_df = pd.DataFrame.from_dict(financials['Financials'][ftype][freq]).T.reset_index(drop=True)
+        financials_df['code'] = code
+        financials_df['exchange'] = exchange
+        financials_df['type'] = ftype
+        financials_df['freq'] = freq
+        return financials_df
+    except:
+        return pd.DataFrame()
 
 def fetch_financials(code, exchange, ftype, freq):
     url = f"https://eodhd.com/api/fundamentals/{code}.{exchange}?api_token={api_key}&fmt=json"
