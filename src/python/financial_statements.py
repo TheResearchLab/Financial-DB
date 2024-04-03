@@ -24,6 +24,13 @@ def prep_financials_df(financials,code,exchange,ftype,freq):
         return financials_df
     except:
         return pd.DataFrame()
+    
+def prep_general_info_df(financials):
+    try:
+        general_info_df = pd.DataFrame.from_dict(financials['General']).reset_index(drop=True)
+        return general_info_df.astype(str)
+    except:
+        return pd.DataFrame()
 
 def fetch_financials(code, exchange, ftype, freq):
     url = f"https://eodhd.com/api/fundamentals/{code}.{exchange}?api_token={api_key}&fmt=json"
@@ -33,12 +40,20 @@ def fetch_financials(code, exchange, ftype, freq):
     empty_msg = f'stock ticker: {code} exchange: {exchange} ftype: {ftype} freq: {freq} is empty'
     
     if unique_combo in cache:
-        financials = cache[unique_combo]
-        financials_df = prep_financials_df(financials,code,exchange,ftype,freq)
-        if financials_df.empty:
-            print(empty_msg)
-            return pd.DataFrame()
-        return financials_df
+        try:
+            financials = cache[unique_combo]
+            financials_df = prep_financials_df(financials,code,exchange,ftype,freq)
+            general_info_df = prep_general_info_df(financials)
+
+            if financials_df is None or general_info_df is None:
+                raise ValueError(f'data for {code}-{exchange} returned None')
+            elif financials_df.empty or general_info_df.empty:
+                print(empty_msg)
+                return pd.DataFrame(), pd.DataFrame()
+            
+            return financials_df,general_info_df
+        except Exception as e:
+            raise Exception(f'Error has occurred: {e}')
     else:
         try:
             response = requests.get(url)
@@ -48,14 +63,20 @@ def fetch_financials(code, exchange, ftype, freq):
                 
                 financials = response.json()
                 financials_df = prep_financials_df(financials,code,exchange,ftype,freq)
+                general_info_df = prep_general_info_df(financials)
 
-                if financials_df.empty:
+                if financials_df is None or general_info_df is None:
+                    raise ValueError(f'data for {code}-{exchange} returned None')
+                elif financials_df.empty or general_info_df.empty:
                     print(empty_msg)
-                    return pd.DataFrame()
+                    return pd.DataFrame(), pd.DataFrame()
         
 
                 cache[unique_combo] = financials
-                return financials_df
+                return financials_df,general_info_df
+            
+            elif response.status_code != 200:
+                raise ValueError(f'data for {code}-{exchange} returned None')
         except Exception as e:
             raise Exception(f'Error has occurred: {e}')
             
@@ -69,9 +90,9 @@ def get_financials(target,bad_code):
         for freq in ['quarterly', 'yearly']:
             for ftype in ['Balance_Sheet', 'Income_Statement', 'Cash_Flow']:
                 
-                financials_df = fetch_financials(code, exchange, ftype, freq)
+                financials_df,general_info_df = fetch_financials(code, exchange, ftype, freq)
 
-                if financials_df.empty:
+                if financials_df.empty or general_info_df.empty:
                     bad_code.append(f'{code}-{exchange}')
                     pd.DataFrame(bad_code,columns=['bad-tickers']).to_csv('bad_code.csv')
                     skip_code = True
@@ -80,7 +101,9 @@ def get_financials(target,bad_code):
                 db_load_financials(financials_df)
             if skip_code:
                 break 
-        continue 
+        if skip_code:
+            continue
+        db_load_general_info(general_info_df) 
     return None
 
 def db_load_financials(stmt):
@@ -104,6 +127,9 @@ def db_load_financials(stmt):
 
     if ftype == 'Cash_Flow' and freq == 'quarterly':
         stmt.to_sql("stg_cashflow_q",con=engine,if_exists='append',index=False)
+
+def db_load_general_info(data):
+    data.to_sql("stg_company_info",con=engine,if_exists='append',index=False)
 
 
 if __name__ == '__main__':
